@@ -20,8 +20,7 @@ Implicant::Implicant(Implicant& i1, Implicant& i2, int delta_index) : Implicant(
 		throw std::invalid_argument(error_msg);
 	}
 
-	i1.is_prime = false;
-	i2.is_prime = false;
+	i1.is_prime = i2.is_prime = false;
 
 	for (const auto& x : i1.terms)
 		terms.insert(x);
@@ -31,11 +30,18 @@ Implicant::Implicant(Implicant& i1, Implicant& i2, int delta_index) : Implicant(
 	binary_rep = i1.binary_rep;
 	binary_rep[delta_index] = '-';
 
-	std::string::difference_type ones_count_str = std::count(binary_rep.begin(), binary_rep.end(), '1');
-	n_ones = static_cast<int>(ones_count_str);
+	n_ones = std::min(i1.n_ones, i2.n_ones);
 }
 
-int Implicant::delta_one(const Implicant& i2)
+Implicant::Implicant(const Implicant& i2)
+{
+	binary_rep = i2.binary_rep;
+	n_ones = i2.n_ones;
+	terms = i2.terms;
+	is_prime = i2.is_prime;
+}
+
+int Implicant::delta_one(const Implicant& i2) const
 {
 	if (binary_rep.length() != i2.binary_rep.length())
 		return -1;
@@ -57,4 +63,9 @@ int Implicant::delta_one(const Implicant& i2)
 	}
 
 	return delta_index;
+}
+
+bool Implicant::operator<(const Implicant& i2) const
+{
+	return binary_rep < i2.binary_rep;
 }
