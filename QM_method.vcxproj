@@ -139,10 +139,12 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Implicant.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="QM_method.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Implicant.h" />
     <ClInclude Include="input.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
