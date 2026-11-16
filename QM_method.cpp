@@ -2,6 +2,9 @@
 #include "input.h"
 #include "Implicant.h"
 #include "combine.h"
+#include "matrix.h"
+
+std::vector<std::vector<Implicant>, std::vector<uint>> reduce_PI_chart(const std::vector<Implicant>& PIs, const std::vector<uint>& minterms);
 
 int main()
 {
@@ -16,6 +19,11 @@ int main()
 
 	std::sort(terms_vector.begin(), terms_vector.end());
 	std::sort(dc_vector.begin(), dc_vector.end());
+
+	std::map<uint, uint> minterm_2_bit_index;
+
+	for (int i = 0; i < terms_vector.size(); i++)
+		minterm_2_bit_index[terms_vector[i]] = i;
 
 	std::set<Implicant*, ImplicantPtrCompare> imp_set;
 	for (const auto& x : terms_vector)
@@ -42,4 +50,34 @@ int main()
 				filtered_PIs.push_back(x);
 		}
 	}
+
+	std::vector<Implicant>(filtered_PIs).swap(filtered_PIs);
+
+	std::cout << "Prime implicants:\n\n";
+	for (const auto& x : filtered_PIs)
+	{
+		std::cout << "(";
+		uint counter = 0;
+
+		for (auto it = x.terms.begin(); it != x.terms.end(); ++it)
+		{
+			std::cout << *it;
+			if (counter != x.terms.size() - 1)
+				std::cout << ", ";
+			else
+				std::cout << ")";
+			counter++;
+		}
+
+		std::cout << " || " << x.binary_rep << "\n\n";
+	}
+
+	std::vector<Implicant> EPIs, nEPIs;
+	std::vector<uint> E_minterms, nE_minterms;
+
+	std::pair<std::vector<Implicant>, std::vector<uint>> reduced = reduce_PI_chart(filtered_PIs, terms_vector, minterm_2_bit_index);
+
+	std::cout << "kappa";
 }
+
+
