@@ -1,4 +1,3 @@
-#include <iostream>
 #include "input.h"
 #include "Implicant.h"
 #include "combine.h"
@@ -98,8 +97,16 @@ int main()
 
 	std::cout << "Essential prime implicants:\n";
 
+	std::vector<std::string> essential_bool_exprs;
+	std::string current;
+
 	for (const auto& x : EPIs)
-		std::cout << binary_rep_2_bool_expr(x.binary_rep) << '\n';
+	{
+		current = binary_rep_2_bool_expr(x.binary_rep);
+		essential_bool_exprs.push_back(current);
+		std::cout << current << '\n';
+	}
+		
 	std::cout << '\n';
 
 	std::cout << "Minterms not covered by prime implicants:\n";
@@ -115,7 +122,65 @@ int main()
 
 	std::pair<std::vector<Implicant>, std::vector<uint>> reduced = reduce_PI_chart(nEPIs, nE_minterms, minterm_2_bit_index);
 
-	std::cout << "kappa";
+	std::vector<Implicant> final_EPIs = reduced.first;
+	std::vector<uint> final_minterms = reduced.second;
+
+	std::map<uint, bool> is_final_minterm;
+	for (const auto& x : final_minterms)
+		is_final_minterm[x] = true;
+
+	std::vector<boost::dynamic_bitset<>> all_solutions;
+	boost::dynamic_bitset<> included(final_EPIs.size(), 0);
+
+	uint best = final_minterms.size();
+
+	std::set<uint> coverage;
+
+	solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, coverage);
+
+	std::string essential_prefix, essential_prefix_nand;
+	for (const auto& s : essential_bool_exprs)
+	{
+		essential_prefix += s + " + ";
+		essential_prefix_nand += "(" + s + ")'" + " x ";
+	}
+
+	essential_prefix = essential_prefix.length() == 0 ? essential_prefix : essential_prefix.substr(0, essential_prefix.size() - 3);
+	essential_prefix_nand = essential_prefix_nand.length() == 0 ? essential_prefix_nand : essential_prefix_nand.substr(0, essential_prefix_nand.size() - 3);
+
+	std::vector<std::string> non_essential_bool_exprs;
+	for (const auto& x : final_EPIs)
+	{
+		current = binary_rep_2_bool_expr(x.binary_rep);
+		non_essential_bool_exprs.push_back(current);
+	}
+
+	std::cout << "Minimized boolean expression(s):\n\n";
+	std::string current_nand;
+
+	for (int i = 0; i < all_solutions.size(); i++)
+	{
+		std::cout << "Solution " << i + 1 << ": " << essential_prefix;
+		current_nand = essential_prefix_nand;
+
+		for (int j = 0; j < all_solutions[i].size(); j++)
+		{		
+			if (all_solutions[i][j] == 1)
+			{
+				if (j != 0 || (j == 0 && essential_prefix.length() != 0))
+				{
+					current_nand += " x ";
+					std::cout << " + ";
+				}
+
+				std::cout << non_essential_bool_exprs[j];
+				current_nand += "(" + non_essential_bool_exprs[j] + ")'";
+			}
+		}
+
+		std::cout << "\nNAND version: " << current_nand << "\n\n";
+		current_nand = "";
+	}
 }
 
 

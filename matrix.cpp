@@ -99,3 +99,35 @@ void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<ui
 	std::vector<Implicant>(EPIs).swap(EPIs); std::vector<Implicant>(nEPIs).swap(nEPIs);
 	std::vector<uint>(E_minterms).swap(E_minterms); std::vector<uint>(nE_minterms).swap(nE_minterms);
 }
+
+void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint best, std::set<uint> coverage, uint current_index)
+{
+	if (included.count() > best)
+		return;
+
+	if (current_index == is_final_minterm.size() && coverage.size() != is_final_minterm.size())
+		return;
+
+	if (coverage.size() == is_final_minterm.size())
+	{
+		if (included.count() < best)
+		{
+			best = included.count();
+			all_solutions.clear();
+		}
+
+		all_solutions.push_back(included);
+	}
+	else
+	{
+		included[current_index] = 1;
+		std::set<uint> new_coverage = coverage;
+		for (const auto& x : final_EPIs[current_index].terms)
+			if (is_final_minterm.find(x) != is_final_minterm.end())
+				new_coverage.insert(x);
+		solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, new_coverage, current_index + 1);
+
+		included[current_index] = 0;
+		solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, coverage, current_index + 1);
+	}
+}

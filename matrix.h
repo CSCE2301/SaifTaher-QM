@@ -9,6 +9,7 @@
 std::vector<boost::dynamic_bitset<>> transpose(std::vector<boost::dynamic_bitset<>> original);
 std::pair<std::vector<Implicant>, std::vector<uint>> reduce_PI_chart(const std::vector<Implicant>& PIs, const std::vector<uint>& minterms, std::map<uint, uint> minterm_2_bit_index);
 void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<uint> minterms, std::vector<Implicant>& EPIs, std::vector<Implicant>& nEPIs, std::vector<uint>& E_minterms, std::vector<uint>& nE_minterms);
+void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint best, std::set<uint> coverage, uint current_index = 0);
 
 template <class T>
 std::vector<boost::dynamic_bitset<>> reduce_matrix(std::vector<boost::dynamic_bitset<>> original, const std::vector<T>& row_entries, std::vector<T>& reduced_row_entries, bool remove_dominated = true)

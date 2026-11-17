@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <set>
 #include "Implicant.h"
 
 typedef unsigned int uint;
