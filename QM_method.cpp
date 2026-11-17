@@ -2,8 +2,7 @@
 #include "Implicant.h"
 #include "combine.h"
 #include "matrix.h"
-
-std::vector<std::vector<Implicant>, std::vector<uint>> reduce_PI_chart(const std::vector<Implicant>& PIs, const std::vector<uint>& minterms);
+#include "generate.h"
 
 std::string binary_rep_2_bool_expr(std::string binary_rep)
 {
@@ -33,6 +32,8 @@ std::string binary_rep_2_bool_expr(std::string binary_rep)
 int main()
 {
 	std::string filename = "data.txt";
+	//gen_data(filename, 6);
+	
 	uint n_vars;
 	bool is_minterms;
 
@@ -64,8 +65,7 @@ int main()
 			filtered_PIs.push_back(x);
 		else
 		{
-			auto minterm_it = std::lower_bound(dc_vector.begin(), dc_vector.end(), *x.terms.begin());
-			if (*x.terms.begin() != *minterm_it)
+			if (!std::binary_search(dc_vector.begin(), dc_vector.end(), *x.terms.begin()))
 				filtered_PIs.push_back(x);
 		}
 	}
@@ -120,9 +120,22 @@ int main()
 	for (int i = 0; i < nE_minterms.size(); i++)
 		minterm_2_bit_index[nE_minterms[i]] = i;
 
-	std::pair<std::vector<Implicant>, std::vector<uint>> reduced = reduce_PI_chart(nEPIs, nE_minterms, minterm_2_bit_index);
+	std::pair<std::vector<Implicant>, std::vector<uint>> reduced = reduce_PI_chart(nEPIs, nE_minterms, minterm_2_bit_index), old_reduced;
 
-	std::vector<Implicant> final_EPIs = reduced.first;
+	// The loop below improves performance at the cost of potentially omitting alternative solutions of the same length.
+	// Comment the loop out if you'd like to view ALL possible solutions.
+	do
+	{
+		old_reduced = reduced;
+
+		minterm_2_bit_index.clear();
+		for (int i = 0; i < reduced.second.size(); i++)
+			minterm_2_bit_index[reduced.second[i]] = i;
+
+		reduced = reduce_PI_chart(reduced.first, reduced.second, minterm_2_bit_index);
+	} while (reduced.first.size() != old_reduced.first.size() || reduced.second.size() != old_reduced.second.size());
+
+	std::vector<Implicant> final_PIs = reduced.first;
 	std::vector<uint> final_minterms = reduced.second;
 
 	std::map<uint, bool> is_final_minterm;
@@ -130,13 +143,13 @@ int main()
 		is_final_minterm[x] = true;
 
 	std::vector<boost::dynamic_bitset<>> all_solutions;
-	boost::dynamic_bitset<> included(final_EPIs.size(), 0);
+	boost::dynamic_bitset<> included(final_PIs.size(), 0);
 
-	uint best = final_minterms.size();
+	uint best = std::min(final_minterms.size(), final_PIs.size());
 
 	std::set<uint> coverage;
 
-	solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, coverage);
+	solve_final(final_PIs, is_final_minterm, all_solutions, included, best, coverage);
 
 	std::string essential_prefix, essential_prefix_nand;
 	for (const auto& s : essential_bool_exprs)
@@ -149,7 +162,7 @@ int main()
 	essential_prefix_nand = essential_prefix_nand.length() == 0 ? essential_prefix_nand : essential_prefix_nand.substr(0, essential_prefix_nand.size() - 3);
 
 	std::vector<std::string> non_essential_bool_exprs;
-	for (const auto& x : final_EPIs)
+	for (const auto& x : final_PIs)
 	{
 		current = binary_rep_2_bool_expr(x.binary_rep);
 		non_essential_bool_exprs.push_back(current);
@@ -182,5 +195,3 @@ int main()
 		current_nand = "";
 	}
 }
-
-

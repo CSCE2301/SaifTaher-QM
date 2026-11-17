@@ -100,12 +100,12 @@ void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<ui
 	std::vector<uint>(E_minterms).swap(E_minterms); std::vector<uint>(nE_minterms).swap(nE_minterms);
 }
 
-void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint best, std::set<uint> coverage, uint current_index)
+void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, std::set<uint> coverage, uint current_index)
 {
 	if (included.count() > best)
 		return;
 
-	if (current_index == is_final_minterm.size() && coverage.size() != is_final_minterm.size())
+	if (current_index == final_EPIs.size() && coverage.size() != is_final_minterm.size())
 		return;
 
 	if (coverage.size() == is_final_minterm.size())
