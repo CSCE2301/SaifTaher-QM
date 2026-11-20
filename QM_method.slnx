@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="QM_method.vcxproj" />
+  <Project Path="QM_method.vcxproj" Id="e7a078c4-34a7-4fd3-ae1d-c5d97a679450" />
 </Solution>

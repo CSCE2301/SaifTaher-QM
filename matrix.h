@@ -6,55 +6,17 @@
 #include <boost/dynamic_bitset.hpp>
 #include "Implicant.h"
 
-std::vector<boost::dynamic_bitset<>> transpose(std::vector<boost::dynamic_bitset<>> original);
-std::pair<std::vector<Implicant>, std::vector<uint>> reduce_PI_chart(const std::vector<Implicant>& PIs, const std::vector<uint>& minterms, std::map<uint, uint> minterm_2_bit_index);
-void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<uint> minterms, std::vector<Implicant>& EPIs, std::vector<Implicant>& nEPIs, std::vector<uint>& E_minterms, std::vector<uint>& nE_minterms);
-void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, std::set<uint> coverage, uint current_index = 0);
+typedef unsigned int uint;
 
-template <class T>
-std::vector<boost::dynamic_bitset<>> reduce_matrix(std::vector<boost::dynamic_bitset<>> original, const std::vector<T>& row_entries, std::vector<T>& reduced_row_entries, bool remove_dominated = true)
+struct Chart
 {
-	std::vector<uint> rows_2_remove; rows_2_remove.reserve(row_entries.size());
-	boost::dynamic_bitset<> and_result(original[0].size());
+    std::vector<Implicant> rows;
+    std::vector<uint32_t> cols;
+    std::vector<boost::dynamic_bitset<>> bitmap;
+};
 
-	for (int i = 0; i < row_entries.size() - 1; i++)
-	{
-		for (int j = i + 1; j < row_entries.size(); j++)
-		{
-			and_result = original[i] & original[j];
-
-			if (and_result == original[i])
-			{
-				if (remove_dominated)
-					rows_2_remove.push_back(i);
-				else
-					rows_2_remove.push_back(j);
-			}
-
-			else if (and_result == original[j])
-			{
-				if (remove_dominated)
-					rows_2_remove.push_back(j);
-				else
-					rows_2_remove.push_back(i);
-			}
-		}
-	}
-
-	reduced_row_entries.reserve(row_entries.size() - rows_2_remove.size());
-	std::vector<boost::dynamic_bitset<>> reduced_chart; reduced_chart.reserve(row_entries.size() - rows_2_remove.size());
-	uint removed_counter = 0;
-
-	for (int i = 0; i < row_entries.size(); i++)
-	{
-		if (removed_counter < rows_2_remove.size() && rows_2_remove[removed_counter] == i)
-		{
-			removed_counter++;
-			continue;
-		}
-		reduced_row_entries.push_back(row_entries[i]);
-		reduced_chart.push_back(original[i]);
-	}
-
-	return reduced_chart;
-}
+void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<uint8_t>& table, uint n_vars, std::vector<Implicant>& EPIs, Chart& residual);
+static std::vector<boost::dynamic_bitset<>> transpose(std::vector<boost::dynamic_bitset<>> original, uint n_cols);
+static void compact(Chart& chart, const std::vector<bool>& keep_row, const std::vector<bool>& keep_col);
+static bool domination_reduction(const std::vector<boost::dynamic_bitset<>>& bitmap, std::vector<bool>& alive, bool kill_dominated);
+void reduce_chart(Chart& chart, std::vector<Implicant>& forced, bool drop_dominated_rows);

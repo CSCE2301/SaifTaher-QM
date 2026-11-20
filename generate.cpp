@@ -7,7 +7,7 @@ void gen_data(std::string filename, int n_vars)
 	std::ofstream out(filename);
 	out << n_vars << '\n';
 
-	double minterm_ratio = 0.3, dc_ratio = 0.1;
+	double minterm_ratio = 0.5, dc_ratio = 0.1;
 
 	uint minterm_max_count = (1 << n_vars), minterm_actual_count = minterm_max_count * minterm_ratio, dc_count = minterm_max_count * dc_ratio;
 	std::vector<bool> used(minterm_max_count, 0);

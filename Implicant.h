@@ -4,29 +4,24 @@
 #include <string>
 #include <algorithm>
 #include <stdexcept>
+#include <bitset>
 
-typedef unsigned int uint;
-
-class Implicant
+struct Implicant
 {
-public:
-	std::set<uint> terms;
-	std::string binary_rep;
-	bool is_prime;
-	int n_ones;
+    uint32_t val_mask;
+    uint32_t dash_mask;
+    bool care;
 
-	Implicant();
-	Implicant(uint term, uint n_vars);
-	Implicant(Implicant& i1, Implicant& i2, int delta_index);
-	Implicant(const Implicant& i2);
-
-	int delta_one(const Implicant& i2) const;
-	bool operator<(const Implicant& i2) const;
+    bool operator<(const Implicant& i2) const { return dash_mask != i2.dash_mask ? dash_mask < i2.dash_mask : val_mask < i2.val_mask; }
+    bool operator==(const Implicant& i2) const { return val_mask == i2.val_mask && dash_mask == i2.dash_mask; }
+    bool covers(uint32_t m) const { return (m & ~dash_mask) == val_mask; }
 };
 
-// For checking for duplicates in std::set
-struct ImplicantPtrCompare {
-	bool operator()(const Implicant* a, const Implicant* b) const {
-		return a->binary_rep < b->binary_rep;
-	}
-};
+template <class F>
+void for_each_minterm(const Implicant& imp, F fnxn) {
+    uint32_t submask = 0;
+
+    do {
+        fnxn(imp.val_mask | submask); submask = (submask - imp.dash_mask) & imp.dash_mask;
+    } while (submask);
+}

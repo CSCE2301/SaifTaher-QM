@@ -146,7 +146,6 @@
     <ClCompile Include="combine.cpp" />
     <ClCompile Include="combine.h" />
     <ClCompile Include="generate.cpp" />
-    <ClCompile Include="Implicant.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="matrix.cpp" />
     <ClCompile Include="QM_method.cpp" />

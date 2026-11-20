@@ -4,96 +4,104 @@
 #include "matrix.h"
 #include "generate.h"
 
-std::string binary_rep_2_bool_expr(std::string binary_rep)
+static bool is_full_cover(const Chart& final_chart, boost::dynamic_bitset<> included)
 {
-	std::string expr;
+	boost::dynamic_bitset<> covered(final_chart.cols.size());
+	for (int i = included.find_first(); i != boost::dynamic_bitset<>::npos; i = included.find_next(i))
+		covered |= final_chart.bitmap[i];
+
+	return covered.count() == final_chart.cols.size();
+}
+
+static std::pair<std::string, std::string> binary_rep_2_bool_expr(const Implicant& imp, uint n_vars)
+{
+	std::string bin_expr, bool_expr;
 	uint counter = 0;
-	for (const char& c : binary_rep)
+
+	for (int i = 0; i < n_vars; i++)
 	{
-		switch (c)
+		if (imp.dash_mask >> i & 1)
 		{
-		case '1':
-			expr += char(65 + counter);
-			break;
-		case '0':
-			expr += char(65 + counter);
-			expr += "\'";
-			break;
-		case '-':
-			break;
-		default:
-			throw std::runtime_error("Invalid binary representation of an implicant.");
+			bin_expr = "-" + bin_expr;
 		}
-		counter++;
+		else
+		{
+			switch (imp.val_mask >> i & 1)
+			{
+			case 1:
+				bin_expr = "1" + bin_expr;
+				bool_expr = char(65 + (n_vars - 1) - i) + bool_expr;
+				break;
+			case 0:
+				bin_expr = "0" + bin_expr;
+				bool_expr = "'" + bool_expr;
+				bool_expr = char(65 + (n_vars - 1) - i) + bool_expr;
+				break;
+			}
+		}	
 	}
-	return expr;
+
+	return { bin_expr, bool_expr };
+}
+
+void solve_final(const Chart& final_chart, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, uint current_index)
+{
+	if (included.count() > best)
+		return;
+
+	if (is_full_cover(final_chart, included))
+	{
+		if (included.count() < best)
+		{
+			best = included.count();
+			all_solutions.clear();
+		}
+
+		all_solutions.push_back(included);
+		return;
+	}
+	
+	if (current_index < final_chart.rows.size())
+	{
+		included[current_index] = 1;
+		solve_final(final_chart, all_solutions, included, best, current_index + 1);
+
+		included[current_index] = 0;
+		solve_final(final_chart, all_solutions, included, best, current_index + 1);
+	}
 }
 
 int main()
 {
 	std::string filename = "data.txt";
-	//gen_data(filename, 6);
-	
 	uint n_vars;
+
+	int n_vars_gen = 8;
+	n_vars = n_vars_gen;
+	gen_data(filename, n_vars_gen);
+	
 	bool is_minterms;
 
 	std::vector<uint> terms_vector, dc_vector;
 	fetch_data(n_vars, is_minterms, terms_vector, dc_vector, filename);
-	if (!is_minterms)
-		terms_vector = complement_terms(n_vars, terms_vector, dc_vector);
+	
+	std::vector<uint8_t> minterm_table = build_minterm_table(n_vars, is_minterms, terms_vector, dc_vector);
 
-	std::sort(terms_vector.begin(), terms_vector.end());
-	std::sort(dc_vector.begin(), dc_vector.end());
+	std::vector<Implicant> PI_vec = PIs(minterm_table, n_vars);
 
-	std::set<Implicant*, ImplicantPtrCompare> imp_set;
-	for (const auto& x : terms_vector)
-		imp_set.insert(new Implicant(x, n_vars));
-	for (const auto& x : dc_vector)
-		imp_set.insert(new Implicant(x, n_vars));
-
-	std::vector<std::set<Implicant*, ImplicantPtrCompare>> segmented_imps(n_vars + 1);
-
-	for (const auto& x : imp_set)
-		segmented_imps[x->n_ones].insert(new Implicant(*x));
-
-	std::set<Implicant> PI_set = PIs(segmented_imps, n_vars);
-	std::vector<Implicant> filtered_PIs; filtered_PIs.reserve(PI_set.size());
-
-	for (const auto& x : PI_set)
-	{
-		if (x.terms.size() > 1)
-			filtered_PIs.push_back(x);
-		else
-		{
-			if (!std::binary_search(dc_vector.begin(), dc_vector.end(), *x.terms.begin()))
-				filtered_PIs.push_back(x);
-		}
-	}
-
-	std::vector<Implicant>(filtered_PIs).swap(filtered_PIs);
-
+	std::pair<std::string, std::string> exp_strs;
 	std::cout << "Prime implicants:\n\n";
-	for (const auto& x : filtered_PIs)
+	for (const auto& x : PI_vec)
 	{
-		std::cout << "(";
-		uint counter = 0;
-
-		for (auto it = x.terms.begin(); it != x.terms.end(); ++it)
-		{
-			std::cout << *it;
-			if (counter != x.terms.size() - 1)
-				std::cout << ", ";
-			else
-				std::cout << ")";
-			counter++;
-		}
-
-		std::cout << " || " << x.binary_rep << "\n\n";
+		exp_strs = binary_rep_2_bool_expr(x, n_vars);
+		std::cout << exp_strs.first << " || " << exp_strs.second << '\n';
 	}
 
-	std::vector<Implicant> EPIs, nEPIs;
-	std::vector<uint> E_minterms, nE_minterms;
-	segregate_essential(filtered_PIs, terms_vector, EPIs, nEPIs, E_minterms, nE_minterms);
+	std::cout << '\n';
+
+	std::vector<Implicant> EPIs;
+	Chart residual;
+	segregate_essential(PI_vec, minterm_table, n_vars, EPIs, residual);
 
 	std::cout << "Essential prime implicants:\n";
 
@@ -102,54 +110,32 @@ int main()
 
 	for (const auto& x : EPIs)
 	{
-		current = binary_rep_2_bool_expr(x.binary_rep);
+		current = binary_rep_2_bool_expr(x, n_vars).second;
 		essential_bool_exprs.push_back(current);
 		std::cout << current << '\n';
 	}
 		
 	std::cout << '\n';
 
-	std::cout << "Minterms not covered by prime implicants:\n";
+	std::cout << "Minterms not covered by essential prime implicants:\n";
 
-	for (const auto& x : nE_minterms)
+	for (const auto& x : residual.cols)
 		std::cout << x << '\n';
 	std::cout << '\n';
 
-	std::map<uint, uint> minterm_2_bit_index;
+	std::vector<Implicant> forced;
 
-	for (int i = 0; i < nE_minterms.size(); i++)
-		minterm_2_bit_index[nE_minterms[i]] = i;
-
-	std::pair<std::vector<Implicant>, std::vector<uint>> reduced = reduce_PI_chart(nEPIs, nE_minterms, minterm_2_bit_index), old_reduced;
-
-	// The loop below improves performance at the cost of potentially omitting alternative solutions of the same length.
-	// Comment the loop out if you'd like to view ALL possible solutions.
-	do
+	reduce_chart(residual, forced, true);
+	for (const auto& x : forced)
 	{
-		old_reduced = reduced;
+		current = binary_rep_2_bool_expr(x, n_vars).second;
+		essential_bool_exprs.push_back(current);
+	}
 
-		minterm_2_bit_index.clear();
-		for (int i = 0; i < reduced.second.size(); i++)
-			minterm_2_bit_index[reduced.second[i]] = i;
-
-		reduced = reduce_PI_chart(reduced.first, reduced.second, minterm_2_bit_index);
-	} while (reduced.first.size() != old_reduced.first.size() || reduced.second.size() != old_reduced.second.size());
-
-	std::vector<Implicant> final_PIs = reduced.first;
-	std::vector<uint> final_minterms = reduced.second;
-
-	std::map<uint, bool> is_final_minterm;
-	for (const auto& x : final_minterms)
-		is_final_minterm[x] = true;
-
+	uint best = std::min(residual.rows.size(), residual.cols.size());
 	std::vector<boost::dynamic_bitset<>> all_solutions;
-	boost::dynamic_bitset<> included(final_PIs.size(), 0);
-
-	uint best = std::min(final_minterms.size(), final_PIs.size());
-
-	std::set<uint> coverage;
-
-	solve_final(final_PIs, is_final_minterm, all_solutions, included, best, coverage);
+	boost::dynamic_bitset<> included(residual.rows.size());
+	solve_final(residual, all_solutions, included, best, 0);
 
 	std::string essential_prefix, essential_prefix_nand;
 	for (const auto& s : essential_bool_exprs)
@@ -162,9 +148,9 @@ int main()
 	essential_prefix_nand = essential_prefix_nand.length() == 0 ? essential_prefix_nand : essential_prefix_nand.substr(0, essential_prefix_nand.size() - 3);
 
 	std::vector<std::string> non_essential_bool_exprs;
-	for (const auto& x : final_PIs)
+	for (const auto& x : residual.rows)
 	{
-		current = binary_rep_2_bool_expr(x.binary_rep);
+		current = binary_rep_2_bool_expr(x, n_vars).second;
 		non_essential_bool_exprs.push_back(current);
 	}
 

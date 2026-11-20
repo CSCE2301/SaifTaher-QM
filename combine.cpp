@@ -1,61 +1,39 @@
 #include "combine.h"
 
-std::vector<std::set<Implicant*, ImplicantPtrCompare>> combine(std::vector<std::set<Implicant*, ImplicantPtrCompare>> prev_iteration, bool& changed, uint n_ones_max)
-{
-	std::vector<std::set<Implicant*, ImplicantPtrCompare>> next_iteration(n_ones_max);
-	int delta_ones;
-	Implicant* combination;
+std::vector<Implicant> PIs(const std::vector<uint8_t>& table, uint n_vars) {
+    const uint32_t max_minterm = (1u << n_vars) - 1;
+    std::vector<Implicant> current, next, primes;
 
-	for (int i = 0; i < prev_iteration.size() - 1; i++)
-	{
-		if (prev_iteration[i].size() == 0 || prev_iteration[i + 1].size() == 0)
-			continue;
-		for (const auto &x: prev_iteration[i])
-		{
-			for (const auto& y : prev_iteration[i + 1])
-			{
-				delta_ones = x->delta_one(*y);
-				if (delta_ones != -1)
-				{
-					changed = true;
-					combination = new Implicant(*x, *y, delta_ones);
-					next_iteration[combination->n_ones].insert(combination);
-				}
-			}
-		}
-	}
+    for (uint32_t m = 0; m <= max_minterm; m++)
+        if (table[m]) // accepts if 1 or 2, corresponding to minterm or dc
+            current.push_back({ m, 0, table[m] == 1 });
 
-	return next_iteration;
-}
+    while (!current.empty()) {
+        std::vector<bool> combined(current.size(), 0);
 
-std::set<Implicant> PIs(std::vector<std::set<Implicant*, ImplicantPtrCompare>> first_iteration, uint n_vars)
-{
-	std::vector<std::vector<std::set<Implicant*, ImplicantPtrCompare>>> all_iterations;
-	std::vector<std::set<Implicant*, ImplicantPtrCompare>> next_iteration;
-	all_iterations.push_back(first_iteration);
+        next.clear();
+        for (size_t i = 0; i < current.size(); i++) {
+            const Implicant& i1 = current[i];
 
-	bool changed;
-	int counter = 1;
-	do
-	{
-		changed = false;
-		next_iteration = combine(all_iterations[all_iterations.size() - 1], changed, n_vars + 1 - counter);
-		counter++;
-		if (changed)
-			all_iterations.push_back(next_iteration);
-	} while (changed);
+            for (uint32_t f = ~(i1.val_mask | i1.dash_mask) & max_minterm; f; f &= f - 1) {
+                uint32_t candidate_mask = f & (~f + 1);
+                Implicant probe{ i1.val_mask | candidate_mask, i1.dash_mask, false };
 
-	std::set<Implicant> PI_set;
+                auto it = std::lower_bound(current.begin() + i + 1, current.end(), probe);
+                if (it != current.end() && *it == probe) {
+                    combined[i] = combined[it - current.begin()] = 1;
+                    if (candidate_mask > i1.dash_mask) // to prevent duplicates
+                        next.push_back({ i1.val_mask, i1.dash_mask | candidate_mask, i1.care || it->care });
+                }
+            }
+        }
 
-	for (int i = 0; i < all_iterations.size(); i++)
-	{
-		for (int j = 0; j < all_iterations[i].size(); j++)
-		{
-			for (const auto& x : all_iterations[i][j])
-				if (x->is_prime)
-					PI_set.insert(*x);
-		}
-	}
+        for (size_t i = 0; i < current.size(); i++)
+            if (!combined[i] && current[i].care) // Don't add implicants which only contain dc terms
+                primes.push_back(current[i]);
 
-	return PI_set;
+        std::sort(next.begin(), next.end());
+        current.swap(next);
+    }
+    return primes;
 }

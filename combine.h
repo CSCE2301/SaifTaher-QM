@@ -5,5 +5,4 @@
 
 typedef unsigned int uint;
 
-std::vector<std::set<Implicant*, ImplicantPtrCompare>> combine(std::vector<std::set<Implicant*, ImplicantPtrCompare>> prev_iteration, bool& changed, uint n_ones_max);
-std::set<Implicant> PIs(std::vector<std::set<Implicant*, ImplicantPtrCompare>> first_iteration, uint n_vars);
+std::vector<Implicant> PIs(const std::vector<uint8_t>& table, uint n_vars);

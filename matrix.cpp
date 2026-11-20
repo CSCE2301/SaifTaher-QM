@@ -1,133 +1,173 @@
 #include "matrix.h"
 
-std::vector<boost::dynamic_bitset<>> transpose(std::vector<boost::dynamic_bitset<>> original)
+void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<uint8_t>& table, uint n_vars, std::vector<Implicant>& EPIs, Chart& residual)
 {
-	uint n_rows = original.size(), n_cols = original[0].size();
-	std::vector<boost::dynamic_bitset<>> transposed(n_cols, boost::dynamic_bitset<>(n_rows));
+    const uint num_minterms = 1U << n_vars;
+    std::vector<uint8_t> count(num_minterms, 0);
+    std::vector<int> only(num_minterms, -1);
 
-	for (int i = 0; i < n_rows; i++)
-		for (int j = 0; j < n_cols; j++)
-			transposed[j][i] = original[i][j];
+    for (int i = 0; i < PIs.size(); i++)
+        for_each_minterm(PIs[i], [&](uint32_t minterm) {
+        if (table[minterm] == 1)
+        {
+            if (count[minterm] < 2)
+                count[minterm]++;
+            only[minterm] = i;
+        }
+    });
 
-	return transposed;
+    std::vector<bool> is_EPI(PIs.size(), 0);
+    for (int m = 0; m < num_minterms; m++)
+        if (table[m] == 1 && count[m] == 1)
+            is_EPI[only[m]] = 1;
+
+    std::vector<uint8_t> covered_by_EPI(num_minterms, 0);
+    for (int i = 0; i < PIs.size(); i++)
+        if (is_EPI[i]) 
+        {
+            EPIs.push_back(PIs[i]);
+            for_each_minterm(PIs[i], [&](uint32_t minterm) { covered_by_EPI[minterm] = 1; });
+        }
+
+    std::vector<int> col_of(num_minterms, -1);
+    for (int m = 0; m < num_minterms; m++)
+        if (table[m] == 1 && !covered_by_EPI[m])
+        {
+            col_of[m] = residual.cols.size();
+            residual.cols.push_back(m);
+        }
+
+    for (int i = 0; i < PIs.size(); i++) {
+        if (is_EPI[i])
+            continue;
+
+        boost::dynamic_bitset<> curr_row(residual.cols.size());
+        for_each_minterm(PIs[i], [&](uint32_t m) { if (col_of[m] >= 0) curr_row[col_of[m]] = 1; });
+        if (curr_row.any()) {
+            residual.rows.push_back(PIs[i]);
+            residual.bitmap.push_back(std::move(curr_row));
+        }
+    }
 }
 
-std::pair<std::vector<Implicant>, std::vector<uint>> reduce_PI_chart(const std::vector<Implicant>& PIs, const std::vector<uint>& minterms, std::map<uint, uint> minterm_2_bit_index)
+static std::vector<boost::dynamic_bitset<>> transpose(std::vector<boost::dynamic_bitset<>> original, uint n_cols)
 {
-	std::vector<boost::dynamic_bitset<>> chart(PIs.size(), boost::dynamic_bitset<>(minterms.size()));
-
-	for (int i = 0; i < PIs.size(); i++)
-	{
-		for (const auto& x : PIs[i].terms)
-		{
-			if (minterm_2_bit_index.find(x) != minterm_2_bit_index.end())
-			{
-				chart[i][minterm_2_bit_index[x]] = 1;
-			}
-		}
-	}
-
-	std::vector<Implicant> reduced_PIs;
-	std::vector<boost::dynamic_bitset<>> reduced_chart = reduce_matrix(chart, PIs, reduced_PIs);
-
-	std::vector<uint> reduced_minterms;
-	std::vector<boost::dynamic_bitset<>> transposed = transpose(reduced_chart);
-	reduce_matrix(transposed, minterms, reduced_minterms, false);
-
-	return std::pair<std::vector<Implicant>, std::vector<uint>>(reduced_PIs, reduced_minterms);
+    std::vector<boost::dynamic_bitset<>> transposed(n_cols, boost::dynamic_bitset<>(original.size()));
+    for (int i = 0; i < original.size(); i++)
+        for (int j = original[i].find_first(); j != boost::dynamic_bitset<>::npos; j = original[i].find_next(j))
+            if (original[i][j])
+                transposed[j].set(i);
+    return transposed;
 }
 
-void segregate_essential(const std::vector<Implicant>& PIs, const std::vector<uint> minterms, std::vector<Implicant>& EPIs, std::vector<Implicant>& nEPIs, std::vector<uint>& E_minterms, std::vector<uint>& nE_minterms)
+static void compact(Chart& chart, const std::vector<bool>& keep_row, const std::vector<bool>& keep_col)
 {
-	E_minterms.reserve(minterms.size()); nE_minterms.reserve(minterms.size());
-	EPIs.reserve(PIs.size()); nEPIs.reserve(PIs.size());
-	std::map<uint, std::vector<const Implicant*>> coverage;
-	std::map<const Implicant*, bool> added;
+    std::vector<int> new_col_indices(chart.cols.size(), -1);
+    std::vector<uint32_t> new_cols;
 
-	std::map<uint, bool> is_minterm;
-	for (const auto& x : minterms)
-		is_minterm[x] = true;
+    for (int i = 0; i < chart.cols.size(); i++)
+        if (keep_col[i])
+        {
+            new_col_indices[i] = new_cols.size();
+            new_cols.push_back(chart.cols[i]);
+        }
 
-	for (int i = 0; i < PIs.size(); i++)
-		for (const auto& y : PIs[i].terms)
-			if (is_minterm[y])
-				coverage[y].push_back(&PIs[i]);
+    std::vector<Implicant> new_rows;
+    std::vector<boost::dynamic_bitset<>> new_bitmap;
 
-	for (auto it = coverage.begin(); it != coverage.end(); ++it)
-	{
-		if (it->second.size() == 1)
-		{
-			if (!added[it->second[0]])
-			{
-				EPIs.push_back(*it->second[0]);
-				added[it->second[0]] = true;
-			}
-			E_minterms.push_back(it->first);
-		}
-	}
+    for (int i = 0; i < chart.rows.size(); i++)
+    {
+        if (!keep_row[i])
+            continue;
 
-	std::map<uint, bool> covered_by_EPIs;
-	std::map<uint, bool> added_to_nE_terms;
+        boost::dynamic_bitset<> curr_row(new_cols.size());
 
-	for (const auto& x : EPIs)
-		for (const auto& y : x.terms)
-			if (is_minterm[y])
-				covered_by_EPIs[y] = true;
+        for (int j = chart.bitmap[i].find_first(); j != boost::dynamic_bitset<>::npos; j = chart.bitmap[i].find_next(j))
+            if (new_col_indices[j] >= 0)
+                curr_row.set(new_col_indices[j]);
 
-	for (auto it = coverage.begin(); it != coverage.end(); ++it)
-	{
-		if (it->second.size() != 1)
-		{
-			for (int i = 0; i < it->second.size(); i++)
-			{
-				if (!added[it->second[i]])
-				{
-					nEPIs.push_back(*it->second[i]);
-					added[it->second[i]] = true;
-				}
-			}
-		}
-	}
+        if (curr_row.none())
+            continue;
 
-	for (const auto& x : minterms)
-		if (!covered_by_EPIs[x] && !added_to_nE_terms[x])
-		{
-			nE_minterms.push_back(x);
-			added_to_nE_terms[x] = true;
-		}
+        new_rows.push_back(chart.rows[i]);
+        new_bitmap.push_back(std::move(curr_row));
+    }
 
-	std::vector<Implicant>(EPIs).swap(EPIs); std::vector<Implicant>(nEPIs).swap(nEPIs);
-	std::vector<uint>(E_minterms).swap(E_minterms); std::vector<uint>(nE_minterms).swap(nE_minterms);
+    chart.rows.swap(new_rows);
+    chart.cols.swap(new_cols);
+    chart.bitmap.swap(new_bitmap);
 }
 
-void solve_final(const std::vector<Implicant>& final_EPIs, const std::map<uint, bool>& is_final_minterm, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, std::set<uint> coverage, uint current_index)
+static bool domination_reduction(const std::vector<boost::dynamic_bitset<>>& bitmap, std::vector<bool>& alive, bool kill_dominated)
 {
-	if (included.count() > best)
-		return;
+    std::vector<int> count(bitmap.size());
 
-	if (current_index == final_EPIs.size() && coverage.size() != is_final_minterm.size())
-		return;
+    for (int i = 0; i < bitmap.size(); i++)
+        count[i] = bitmap[i].count();
 
-	if (coverage.size() == is_final_minterm.size())
-	{
-		if (included.count() < best)
-		{
-			best = included.count();
-			all_solutions.clear();
-		}
+    bool any = false;
+    for (int i = 0; i < bitmap.size(); i++)
+        for (int j = 0; j < bitmap.size() && alive[i]; j++)
+        {
+            if (i == j || !alive[j])
+                continue;
+            if (kill_dominated ? count[i] > count[j] : count[j] > count[i])
+                continue;
+            if (count[i] == count[j] && i < j)
+                continue;
 
-		all_solutions.push_back(included);
-	}
-	else
-	{
-		included[current_index] = 1;
-		std::set<uint> new_coverage = coverage;
-		for (const auto& x : final_EPIs[current_index].terms)
-			if (is_final_minterm.find(x) != is_final_minterm.end())
-				new_coverage.insert(x);
-		solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, new_coverage, current_index + 1);
-
-		included[current_index] = 0;
-		solve_final(final_EPIs, is_final_minterm, all_solutions, included, best, coverage, current_index + 1);
-	}
+            bool dominated = kill_dominated ? bitmap[i].is_subset_of(bitmap[j]) : bitmap[j].is_subset_of(bitmap[i]);
+            if (dominated)
+            {
+                alive[i] = 0;
+                any = true;
+            }
+        }
+    return any;
 }
+
+void reduce_chart(Chart& chart, std::vector<Implicant>& forced, bool drop_dominated_rows)
+{
+    bool changed = true;
+    while (changed && !chart.rows.empty() && !chart.cols.empty())
+    {
+        changed = false;
+        std::vector<boost::dynamic_bitset<>> cols_trans = transpose(chart.bitmap, chart.cols.size());
+        std::vector<bool> keep_row(chart.rows.size(), 1), keep_col(chart.cols.size(), 1);
+
+        for (int i = 0; i < cols_trans.size(); i++)
+            if (cols_trans[i].count() == 1)
+            {
+                int j = cols_trans[i].find_first();
+                if (keep_row[j])
+                {
+                    keep_row[j] = 0;
+                    forced.push_back(chart.rows[j]);
+                    for (int k = chart.bitmap[j].find_first(); k != boost::dynamic_bitset<>::npos; k = chart.bitmap[j].find_next(k))
+                        keep_col[k] = 0;
+                    changed = true;
+                }
+            }
+
+        if (changed)
+        { 
+            compact(chart, keep_row, keep_col);
+            continue;
+        }
+
+        if (domination_reduction(cols_trans, keep_col, false))
+        {
+            compact(chart, keep_row, keep_col);
+            changed = true;
+            continue;
+        }
+
+        if (drop_dominated_rows)
+            if (domination_reduction(chart.bitmap, keep_row, true))
+            {
+                compact(chart, keep_row, keep_col);
+                changed = true;
+            }
+    }
+}
+

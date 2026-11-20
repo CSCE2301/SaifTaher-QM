@@ -47,25 +47,14 @@ void fetch_data(uint& n_vars, bool& is_minterms, std::vector<uint>& terms_vector
 	}
 }
 
-std::vector<uint> complement_terms(uint n_vars, std::vector<uint>& terms, std::vector<uint>& dc)
+std::vector<uint8_t> build_minterm_table(uint n_vars, bool is_minterms, const std::vector<uint>& terms, const std::vector<uint>& dc)
 {
-	std::sort(terms.begin(), terms.end());
-	uint curr_term = 0, curr_dc = 0, cap = 1 << n_vars;
-	std::vector<uint> complemented; complemented.reserve(cap);
+	std::vector<uint8_t> table(1u << n_vars, is_minterms ? 0 : 1);
 
-	for (uint i = 0; i < cap; i++)
-	{
-		if (curr_term >= terms.size() || i != terms[curr_term])
-		{
-			if (curr_dc >= dc.size() || i != dc[curr_dc])
-				complemented.push_back(i);
-			else
-				curr_dc++;
-		}
-		else
-			curr_term++;
-	}
+	for (uint t : terms)
+		table[t] = is_minterms ? 1 : 0;
+	for (uint d : dc)
+		table[d] = 2;
 
-	std::vector<uint>(complemented).swap(complemented);
-	return complemented;
+	return table;
 }
