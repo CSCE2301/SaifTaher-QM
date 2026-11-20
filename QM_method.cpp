@@ -44,9 +44,11 @@ static std::pair<std::string, std::string> binary_rep_2_bool_expr(const Implican
 	return { bin_expr, bool_expr };
 }
 
-void solve_final(const Chart& final_chart, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, uint current_index)
+void solve_final(const Chart& final_chart, std::vector<boost::dynamic_bitset<>>& all_solutions, boost::dynamic_bitset<>& included, uint& best, uint current_index, bool unique)
 {
 	if (included.count() > best)
+		return;
+	if (included.count() == best && unique)
 		return;
 
 	if (is_full_cover(final_chart, included))
@@ -56,6 +58,8 @@ void solve_final(const Chart& final_chart, std::vector<boost::dynamic_bitset<>>&
 			best = included.count();
 			all_solutions.clear();
 		}
+		else if (unique)
+			return;
 
 		all_solutions.push_back(included);
 		return;
@@ -64,10 +68,10 @@ void solve_final(const Chart& final_chart, std::vector<boost::dynamic_bitset<>>&
 	if (current_index < final_chart.rows.size())
 	{
 		included[current_index] = 1;
-		solve_final(final_chart, all_solutions, included, best, current_index + 1);
+		solve_final(final_chart, all_solutions, included, best, current_index + 1, unique);
 
 		included[current_index] = 0;
-		solve_final(final_chart, all_solutions, included, best, current_index + 1);
+		solve_final(final_chart, all_solutions, included, best, current_index + 1, unique);
 	}
 }
 
@@ -76,9 +80,9 @@ int main()
 	std::string filename = "data.txt";
 	uint n_vars;
 
-	int n_vars_gen = 8;
-	n_vars = n_vars_gen;
-	gen_data(filename, n_vars_gen);
+	//int n_vars_gen = 7;
+	//n_vars = n_vars_gen;
+	//gen_data(filename, n_vars_gen);
 	
 	bool is_minterms;
 
@@ -124,8 +128,9 @@ int main()
 	std::cout << '\n';
 
 	std::vector<Implicant> forced;
+	bool unique_solution = true;
 
-	reduce_chart(residual, forced, true);
+	reduce_chart(residual, forced, unique_solution);
 	for (const auto& x : forced)
 	{
 		current = binary_rep_2_bool_expr(x, n_vars).second;
@@ -135,7 +140,7 @@ int main()
 	uint best = std::min(residual.rows.size(), residual.cols.size());
 	std::vector<boost::dynamic_bitset<>> all_solutions;
 	boost::dynamic_bitset<> included(residual.rows.size());
-	solve_final(residual, all_solutions, included, best, 0);
+	solve_final(residual, all_solutions, included, best, 0, unique_solution);
 
 	std::string essential_prefix, essential_prefix_nand;
 	for (const auto& s : essential_bool_exprs)
@@ -157,27 +162,35 @@ int main()
 	std::cout << "Minimized boolean expression(s):\n\n";
 	std::string current_nand;
 
-	for (int i = 0; i < all_solutions.size(); i++)
+	if (all_solutions.size() == 0)
 	{
-		std::cout << "Solution " << i + 1 << ": " << essential_prefix;
-		current_nand = essential_prefix_nand;
+		std::cout << "Solution: " << essential_prefix;
+		std::cout << "\nNAND version: " << essential_prefix_nand << "\n\n";
+	}
+	else
+	{
+		for (int i = 0; i < all_solutions.size(); i++)
+		{
+			std::cout << "Solution " << i + 1 << ": " << essential_prefix;
+			current_nand = essential_prefix_nand;
 
-		for (int j = 0; j < all_solutions[i].size(); j++)
-		{		
-			if (all_solutions[i][j] == 1)
+			for (int j = 0; j < all_solutions[i].size(); j++)
 			{
-				if (j != 0 || (j == 0 && essential_prefix.length() != 0))
+				if (all_solutions[i][j] == 1)
 				{
-					current_nand += " x ";
-					std::cout << " + ";
+					if (j != 0 || (j == 0 && essential_prefix.length() != 0))
+					{
+						current_nand += " x ";
+						std::cout << " + ";
+					}
+
+					std::cout << non_essential_bool_exprs[j];
+					current_nand += "(" + non_essential_bool_exprs[j] + ")'";
 				}
-
-				std::cout << non_essential_bool_exprs[j];
-				current_nand += "(" + non_essential_bool_exprs[j] + ")'";
 			}
-		}
 
-		std::cout << "\nNAND version: " << current_nand << "\n\n";
-		current_nand = "";
+			std::cout << "\nNAND version: " << current_nand << "\n\n";
+			current_nand = "";
+		}
 	}
 }
